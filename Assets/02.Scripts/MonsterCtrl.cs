@@ -52,6 +52,12 @@ public class MonsterCtrl : MonoBehaviour
     {
         // 이벤트 발생 시 수행할 함수 연결
         PlayerCtrl.OnPlayerDie += this.OnPlayerDie;
+
+        // 몬스터의 상태를 체크하는 코루틴 함수 호출
+        StartCoroutine(CheckMonsterState());
+
+        // 상태에 따라 몬스터의 행동을 수행하는 코루틴 함수 호출
+        StartCoroutine(MonsterAction());
     }
 
 
@@ -66,7 +72,7 @@ public class MonsterCtrl : MonoBehaviour
 
 
     // Start is called before the first frame update
-    void Start()
+    void Awake()
     {
         // 몬스터의 Transform 할당
         monsterTr = GetComponent<Transform>();
@@ -83,11 +89,6 @@ public class MonsterCtrl : MonoBehaviour
         // BloodSprayEffect 프리팹 로드
         bloodEffect = Resources.Load<GameObject>("BloodSprayEffect");
 
-        // 몬스터의 상태를 체크하는 코루틴 함수 호출
-        StartCoroutine(CheckMonsterState());
-
-        // 상태에 따라 몬스터의 행동을 수행하는 코루틴 함수 호출
-        StartCoroutine(MonsterAction());
     }
 
 
@@ -136,27 +137,19 @@ public class MonsterCtrl : MonoBehaviour
                 case State.IDLE:
                     // 추적 중지
                     agent.isStopped = true;
-
                     // Animator의 IsTrace 변수를 false로 설정
                     anim.SetBool(hashTrace, false);
-
                     break;
-
                 // 추적 상태
                 case State.TRACE:
                     // 추적 대상의 좌표로 이동 시작
                     agent.SetDestination(playerTr.position);
-
                     agent.isStopped = false;
-
                     // Animator의 IsTrace 변수를 true로 설정
                     anim.SetBool(hashTrace, true);
-
                     // Animator의 IsAttack 변수를 false로 설정
                     anim.SetBool(hashAttack, false);
-
                     break;
-
                 // 공격 상태
                 case State.ATTACK:
                     // Animator의 IsAttack 변수를 true로 설정
@@ -166,15 +159,22 @@ public class MonsterCtrl : MonoBehaviour
                 // 사망
                 case State.DIE:
                     isDie = true;
-
                     // 추적 정지
                     agent.isStopped = true;
-
                     // 사망 애니메이션 실행
                     anim.SetTrigger(hashDie);
-
                     // 몬스터의 Collider 컴포넌트 비활성화
                     GetComponent<CapsuleCollider>().enabled = false;
+                    // 일정 시간 대기 후 오브젝트 풀링으로 환원
+                    yield return new WaitForSeconds(3.0f);
+                    // 사망 후 다시 사용할 때를 위해 hp 값 초기화
+                    hp = 100;
+                    isDie = false;
+                    state = State.IDLE;
+                    // 몬스터의 Collider 컴포넌트 활성화
+                    GetComponent<CapsuleCollider>().enabled = true;
+                    // 몬스터를 비활성화
+                    this.gameObject.SetActive(false);
                     break;
             }
             yield return new WaitForSeconds(0.3f);
@@ -210,27 +210,25 @@ public class MonsterCtrl : MonoBehaviour
             // 피격 리액션 애니메이션 실행
             anim.SetTrigger(hashHit);
 
-
             // 총알의 충돌 지점
             Vector3 pos = coll.GetContact(0).point;
             // 총알의 충돌 지점의 법선 벡터
             Quaternion rot = Quaternion.LookRotation(-coll.GetContact(0).normal);
             // 혈흔 효과를 생성하는 함수 호출
             ShowBloodEffect(pos, rot);
-
-
             // 몬스터의 hp 차감
             hp -= 10;
-
             if (hp <= 0)
             {
                 state = State.DIE;
+                //몬스터가 사망했을 때 50점을 추가
+                GameManager.instance.DisplayScore(50);
             }
         }
     }
 
 
-    
+
     // 자기 자신 충돌 감지를 위해서 추가
     void OnTriggerEnter(Collider coll)
     {
